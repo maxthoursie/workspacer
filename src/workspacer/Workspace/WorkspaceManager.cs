@@ -17,6 +17,7 @@ namespace workspacer
         private IWorkspace _dropWorkspace;
         private IWindow _dropTarget;
         private Rectangle _dropRect;
+        private int _dropIndex = -1;
         private bool _dropCenter;
         private bool _dropBefore;
         private Dictionary<IWorkspace, List<IWindow>> _dropBaseline;
@@ -765,6 +766,7 @@ namespace workspacer
 
             IWindow target;
             Rectangle bounds;
+            int dropIndex;
             bool center;
             bool before;
             var restored = false;
@@ -773,6 +775,7 @@ namespace workspacer
             {
                 target = _dropTarget;
                 bounds = _dropRect;
+                dropIndex = _dropIndex;
                 GetDropPosition(bounds, x, y, out center, out before);
             }
             else
@@ -780,8 +783,9 @@ namespace workspacer
                 RestoreDropBaseline();
                 restored = true;
 
-                target = destination.GetDropTarget(x, y, out center, out before, out bounds);
-                if (target == null || target == window)
+                target = destination.GetDropTarget(window, x, y, out dropIndex,
+                    out center, out before, out bounds);
+                if (dropIndex < 0)
                 {
                     LayoutDropBaseline();
                     ClearDropTarget();
@@ -790,7 +794,7 @@ namespace workspacer
             }
 
             if (!restored && _dropWorkspace == destination && _dropTarget == target &&
-                _dropCenter == center && _dropBefore == before)
+                _dropIndex == dropIndex && _dropCenter == center && _dropBefore == before)
             {
                 return;
             }
@@ -809,10 +813,15 @@ namespace workspacer
             _dropWorkspace = destination;
             _dropTarget = target;
             _dropRect = bounds;
+            _dropIndex = dropIndex;
             _dropCenter = center;
             _dropBefore = before;
 
-            if (source == destination)
+            if (target == null)
+            {
+                MoveWindowToSlot(source, destination, window, dropIndex);
+            }
+            else if (source == destination)
             {
                 destination.ApplyDrop(window, target, center, before);
             }
@@ -906,6 +915,7 @@ namespace workspacer
             _dropWorkspace = null;
             _dropTarget = null;
             _dropRect = Rectangle.Empty;
+            _dropIndex = -1;
             _dropCenter = false;
             _dropBefore = false;
         }
@@ -966,8 +976,39 @@ namespace workspacer
             return true;
         }
 
-        private IWorkspace GetWorkspaceForWindowLocation(
-            IWindow window)
+        private bool MoveWindowToSlot(IWorkspace source, IWorkspace destination,
+            IWindow window, int index)
+        {
+            var sourceWindows = source.Windows.ToList();
+            var destinationWindows = source == destination
+                ? sourceWindows
+                : destination.Windows.ToList();
+
+            if (!sourceWindows.Remove(window))
+            {
+                Logger.Warn("Could not remove window {0} from source workspace", window);
+                return false;
+            }
+
+            /*
+             * The prospective layout contains one extra placeholder slot. After
+             * removing the real window, clamp that slot to the resulting list.
+             */
+            index = System.Math.Max(0, System.Math.Min(index, destinationWindows.Count));
+            destinationWindows.Insert(index, window);
+
+            if (source != destination)
+            {
+                source.SetWindows(sourceWindows);
+                _windowsToWorkspaces[window] = destination;
+                WindowMoved?.Invoke(window, source, destination);
+            }
+
+            destination.SetWindows(destinationWindows);
+            return true;
+        }
+
+        private IWorkspace GetWorkspaceForWindowLocation(IWindow window)
         {
             var location = window.Location;
 

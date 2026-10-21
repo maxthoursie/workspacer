@@ -145,7 +145,8 @@ namespace workspacer
         /// <param name="y">y coordinate of the point</param>
         void SwapWindowToPoint(IWindow window, int x, int y);
 
-        IWindow GetDropTarget(int x, int y, out bool center, out bool before, out Rectangle bounds);
+        IWindow GetDropTarget(IWindow draggedWindow, int x, int y, out int index,
+            out bool center, out bool before, out Rectangle bounds);
         bool ApplyDrop(IWindow window, IWindow target, bool center, bool before);
         /// <summary>
         /// check if the given point is in the workspace

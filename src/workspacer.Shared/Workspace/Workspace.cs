@@ -421,18 +421,18 @@ namespace workspacer
                 return;
             }
 
-            var target = GetDropTarget(
+            var target = GetDropTarget(window,
                 x,
                 y,
+                out _,
                 out bool center,
                 out bool before,
                 out _);
 
-            ApplyDrop(
-                window,
-                target,
-                center,
-                before);
+            if (target != null)
+            {
+                ApplyDrop(window, target, center, before);
+            }
         }
 
         /// <summary>
@@ -479,25 +479,20 @@ namespace workspacer
             return true;
         }
 
-        public IWindow GetDropTarget(
+        public IWindow GetDropTarget(IWindow draggedWindow,
             int x,
             int y,
+            out int index,
             out bool center,
             out bool before,
             out Rectangle bounds)
         {
+            index = -1;
             center = false;
             before = true;
             bounds = Rectangle.Empty;
 
             var windows = ManagedWindows.ToList();
-            var layout = CalcLayout()?.ToList();
-
-            if (layout == null)
-            {
-                return null;
-            }
-
             var monitor = _context.WorkspaceContainer
                 .GetCurrentMonitorForWorkspace(this);
 
@@ -507,18 +502,27 @@ namespace workspacer
             }
 
             /*
-             * A layout engine should return one location per managed
-             * window, but limit the loop defensively in case it does not.
+             * Add the dragged window as a placeholder. For another workspace this
+             * gives an empty workspace its first slot. For the current workspace
+             * the duplicate exposes the next unused slot in count-based layouts.
+             */
+            windows.Add(draggedWindow);
+
+            var layout = GetLayoutEngine()
+                .CalcLayout(windows, monitor.Width, monitor.Height)
+                .ToList();
+
+            /*
+             * A layout engine should return one location per supplied window,
+             * but limit the loop defensively in case it does not.
              */
             var count = System.Math.Min(
                 windows.Count,
                 layout.Count);
 
-            for (var index = 0;
-                 index < count;
-                 index++)
+            for (var slotIndex = 0; slotIndex < count; slotIndex++)
             {
-                var slot = layout[index];
+                var slot = layout[slotIndex];
 
                 if (slot.Width <= 0 ||
                     slot.Height <= 0)
@@ -537,6 +541,7 @@ namespace workspacer
                     continue;
                 }
 
+                index = slotIndex;
                 bounds = slotBounds;
 
                 double u =
@@ -565,7 +570,13 @@ namespace workspacer
                         ? u < 0.5
                         : v < 0.5;
 
-                return windows[index];
+                /*
+                 * Either occurrence of draggedWindow represents an empty slot for
+                 * this drag. The caller uses index to insert it there.
+                 */
+                return windows[slotIndex] == draggedWindow
+                    ? null
+                    : windows[slotIndex];
             }
 
             return null;
