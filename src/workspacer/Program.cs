@@ -33,9 +33,9 @@ namespace workspacer
             {
                 ConfigHelper.DoConfig(context);
             }
-            catch
+            catch(Exception ex)
             {
-                // suppress error
+                MessageBox.Show(ex.ToString(), "Startup error");
             }
             _branch = context.Branch;
             context.SystemTray.Dispose();

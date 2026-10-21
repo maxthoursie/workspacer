@@ -1,4 +1,5 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 
 namespace workspacer
@@ -13,7 +14,7 @@ namespace workspacer
             {
                 lock (_windows)
                 {
-                    // return copy to prevent race-conditions!
+                    // Return a copy to prevent race conditions.
                     return _windows.ToList();
                 }
             }
@@ -25,35 +26,48 @@ namespace workspacer
             {
                 lock (_windows)
                 {
-                    return _windows.Where(w =>
-                        w.CanLayout && !(_context.CanMinimizeWindows && w.IsMinimized)
-                    ).ToList();
+                    return _windows
+                        .Where(window =>
+                            window.CanLayout &&
+                            !(_context.CanMinimizeWindows &&
+                              window.IsMinimized))
+                        .ToList();
                 }
             }
         }
+
         public IWindow FocusedWindow
         {
             get
             {
                 lock (_windows)
                 {
-                    return _windows.FirstOrDefault(w => w.IsFocused);
+                    return _windows.FirstOrDefault(
+                        window => window.IsFocused);
                 }
             }
         }
 
         public IWindow LastFocusedWindow => _lastFocused;
+
         public string Name { get; set; }
-        public string LayoutName => _layoutEngines[_layoutIndex].Name;
+
+        public string LayoutName =>
+            _layoutEngines[_layoutIndex].Name;
+
         public bool IsIndicating { get; set; }
 
-        private IConfigContext _context;
-        private List<IWindow> _windows;
-        private ILayoutEngine[] _layoutEngines;
+        private readonly IConfigContext _context;
+        private readonly List<IWindow> _windows;
+        private readonly ILayoutEngine[] _layoutEngines;
+
         private int _layoutIndex;
         private IWindow _lastFocused;
 
-        public Workspace(IConfigContext context, string name, ILayoutEngine[] layoutEngines)
+        public Workspace(
+            IConfigContext context,
+            string name,
+            ILayoutEngine[] layoutEngines)
         {
             _context = context;
             _layoutEngines = layoutEngines;
@@ -64,16 +78,20 @@ namespace workspacer
             Name = name;
         }
 
-        public void AddWindow(IWindow window, bool layout = true)
+        public void AddWindow(
+            IWindow window,
+            bool layout = true)
         {
             lock (_windows)
             {
-                if (_lastFocused == null && window.IsFocused)
+                if (_lastFocused == null &&
+                    window.IsFocused)
                 {
                     _lastFocused = window;
                 }
 
-                if (_context.NewWindowOrder == WindowOrder.NewWindowsFirst)
+                if (_context.NewWindowOrder ==
+                    WindowOrder.NewWindowsFirst)
                 {
                     _windows.Insert(0, window);
                 }
@@ -81,43 +99,74 @@ namespace workspacer
                 {
                     _windows.Add(window);
                 }
-                
 
                 if (layout)
+                {
                     DoLayout();
+                }
             }
         }
 
-        public void RemoveWindow(IWindow window, bool layout = true)
+        public void RemoveWindow(
+            IWindow window,
+            bool layout = true)
         {
             lock (_windows)
             {
                 if (_lastFocused == window)
                 {
                     var windows = ManagedWindows;
-                    var next = windows.Count > 1 ? windows[(windows.IndexOf(window) + 1) % windows.Count] : null;
+
+                    var next = windows.Count > 1
+                        ? windows[
+                            (windows.IndexOf(window) + 1) %
+                            windows.Count]
+                        : null;
+
                     _lastFocused = next;
                 }
 
                 _windows.Remove(window);
 
                 if (layout)
+                {
                     DoLayout();
+                }
+            }
+        }
+
+        public void SetWindows(IEnumerable<IWindow> windows)
+        {
+            lock (_windows)
+            {
+                _windows.Clear();
+                _windows.AddRange(windows);
+
+                if (_lastFocused != null && !_windows.Contains(_lastFocused))
+                {
+                    _lastFocused = _windows.FirstOrDefault(window => window.IsFocused);
+                }
             }
         }
 
         public void UpdateWindow(IWindow window, WindowUpdateType type, bool layout = true)
         {
             if (type == WindowUpdateType.Foreground)
+            {
                 _lastFocused = window;
+            }
 
             if (layout)
+            {
                 DoLayout();
+            }
         }
 
         public void CloseFocusedWindow()
         {
-            var window = ManagedWindows.FirstOrDefault(w => w.IsFocused);
+            var window = ManagedWindows
+                .FirstOrDefault(window => window.IsFocused);
+
             window?.Close();
         }
 
@@ -131,6 +180,7 @@ namespace workspacer
             {
                 _layoutIndex--;
             }
+
             DoLayout();
         }
 
@@ -144,6 +194,7 @@ namespace workspacer
             {
                 _layoutIndex++;
             }
+
             DoLayout();
         }
 
@@ -158,7 +209,8 @@ namespace workspacer
             if (_lastFocused != null)
             {
                 _lastFocused.Focus();
-            } else
+            }
+            else
             {
                 FocusPrimaryWindow();
             }
@@ -168,22 +220,29 @@ namespace workspacer
         {
             var windows = ManagedWindows;
             var didFocus = false;
-            for (var i = 0; i < windows.Count; i++)
+
+            for (var index = 0;
+                 index < windows.Count;
+                 index++)
             {
-                var window = windows[i];
-                if (window.IsFocused)
+                var window = windows[index];
+
+                if (!window.IsFocused)
                 {
-                    if (i + 1 == windows.Count)
-                    {
-                        windows[0].Focus();
-                    }
-                    else
-                    {
-                        windows[i + 1].Focus();
-                    }
-                    didFocus = true;
-                    break;
+                    continue;
                 }
+
+                if (index + 1 == windows.Count)
+                {
+                    windows[0].Focus();
+                }
+                else
+                {
+                    windows[index + 1].Focus();
+                }
+
+                didFocus = true;
+                break;
             }
 
             if (!didFocus && windows.Count > 0)
@@ -191,7 +250,8 @@ namespace workspacer
                 if (_lastFocused != null)
                 {
                     _lastFocused.Focus();
-                } else
+                }
+                else
                 {
                     windows[0].Focus();
                 }
@@ -202,22 +262,29 @@ namespace workspacer
         {
             var windows = ManagedWindows;
             var didFocus = false;
-            for (var i = 0; i < windows.Count; i++)
+
+            for (var index = 0;
+                 index < windows.Count;
+                 index++)
             {
-                var window = windows[i];
-                if (window.IsFocused)
+                var window = windows[index];
+
+                if (!window.IsFocused)
                 {
-                    if (i == 0)
-                    {
-                        windows[windows.Count - 1].Focus();
-                    }
-                    else
-                    {
-                        windows[i - 1].Focus();
-                    }
-                    didFocus = true;
-                    break;
+                    continue;
                 }
+
+                if (index == 0)
+                {
+                    windows[windows.Count - 1].Focus();
+                }
+                else
+                {
+                    windows[index - 1].Focus();
+                }
+
+                didFocus = true;
+                break;
             }
 
             if (!didFocus && windows.Count > 0)
@@ -225,7 +292,8 @@ namespace workspacer
                 if (_lastFocused != null)
                 {
                     _lastFocused.Focus();
-                } else
+                }
+                else
                 {
                     windows[0].Focus();
                 }
@@ -241,57 +309,81 @@ namespace workspacer
         public void SwapFocusAndPrimaryWindow()
         {
             var windows = ManagedWindows;
-            if (windows.Count > 1)
-            {
-                var primary = windows[0];
-                var focus = windows.FirstOrDefault(w => w.IsFocused);
 
-                if (focus != null)
-                {
-                    SwapWindows(primary, focus);
-                }
+            if (windows.Count <= 1)
+            {
+                return;
+            }
+
+            var primary = windows[0];
+            var focused = windows.FirstOrDefault(
+                window => window.IsFocused);
+
+            if (focused != null)
+            {
+                SwapWindows(primary, focused);
             }
         }
 
         public void SwapFocusAndNextWindow()
         {
             var windows = ManagedWindows;
-            for (var i = 0; i < windows.Count; i++)
+
+            for (var index = 0;
+                 index < windows.Count;
+                 index++)
             {
-                var window = windows[i];
-                if (window.IsFocused)
+                var window = windows[index];
+
+                if (!window.IsFocused)
                 {
-                    if (i + 1 == windows.Count)
-                    {
-                        SwapWindows(window, windows[0]);
-                    }
-                    else
-                    {
-                        SwapWindows(window, windows[i + 1]);
-                    }
-                    break;
+                    continue;
                 }
+
+                if (index + 1 == windows.Count)
+                {
+                    SwapWindows(window, windows[0]);
+                }
+                else
+                {
+                    SwapWindows(
+                        window,
+                        windows[index + 1]);
+                }
+
+                break;
             }
         }
 
         public void SwapFocusAndPreviousWindow()
         {
             var windows = ManagedWindows;
-            for (var i = 0; i < windows.Count; i++)
+
+            for (var index = 0;
+                 index < windows.Count;
+                 index++)
             {
-                var window = windows[i];
-                if (window.IsFocused)
+                var window = windows[index];
+
+                if (!window.IsFocused)
                 {
-                    if (i == 0)
-                    {
-                        SwapWindows(window, windows[windows.Count - 1]);
-                    }
-                    else
-                    {
-                        SwapWindows(window, windows[i - 1]);
-                    }
-                    break;
+                    continue;
                 }
+
+                if (index == 0)
+                {
+                    SwapWindows(
+                        window,
+                        windows[windows.Count - 1]);
+                }
+                else
+                {
+                    SwapWindows(
+                        window,
+                        windows[index - 1]);
+                }
+
+                break;
             }
         }
 
@@ -300,6 +392,7 @@ namespace workspacer
             GetLayoutEngine().ShrinkPrimaryArea();
             DoLayout();
         }
+
         public void ExpandPrimaryArea()
         {
             GetLayoutEngine().ExpandPrimaryArea();
@@ -318,65 +411,265 @@ namespace workspacer
             DoLayout();
         }
 
-        public void SwapWindowToPoint(IWindow window, int x, int y)
+        public void SwapWindowToPoint(
+            IWindow window,
+            int x,
+            int y)
         {
-            var windows = ManagedWindows;
-            if (windows.Contains(window))
+            if (!ManagedWindows.Contains(window))
             {
-                var index = GetLayoutSlotIndexForPoint(x, y);
-                var destWindow = index != -1 && windows.Count > index ? windows[index] : null;
+                return;
+            }
 
-                if (destWindow != null && window != destWindow)
+            var target = GetDropTarget(
+                x,
+                y,
+                out bool center,
+                out bool before,
+                out _);
+
+            ApplyDrop(
+                window,
+                target,
+                center,
+                before);
+        }
+
+        /// <summary>
+        /// Applies an already resolved drop operation.
+        ///
+        /// This allows WorkspaceManager to cache the target and its
+        /// original rectangle while previewing a drag. The target does
+        /// not need to be resolved again after the layout has changed.
+        /// </summary>
+        public bool ApplyDrop(
+            IWindow window,
+            IWindow target,
+            bool center,
+            bool before)
+        {
+            if (target == null ||
+                target == window)
+            {
+                return false;
+            }
+
+            if (center)
+            {
+                Logger.Debug(
+                    "ApplyDrop[{0} -> {1}] center",
+                    window,
+                    target);
+
+                return SwapWindows(window, target);
+            }
+
+            if (!InsertWindow(window, target, before))
+            {
+                return false;
+            }
+
+            Logger.Debug(
+                "ApplyDrop[{0} -> {1}] edge, before={2}",
+                window,
+                target,
+                before);
+
+            DoLayout();
+            return true;
+        }
+
+        public IWindow GetDropTarget(
+            int x,
+            int y,
+            out bool center,
+            out bool before,
+            out Rectangle bounds)
+        {
+            center = false;
+            before = true;
+            bounds = Rectangle.Empty;
+
+            var windows = ManagedWindows.ToList();
+            var layout = CalcLayout()?.ToList();
+
+            if (layout == null)
+            {
+                return null;
+            }
+
+            var monitor = _context.WorkspaceContainer
+                .GetCurrentMonitorForWorkspace(this);
+
+            if (monitor == null)
+            {
+                return null;
+            }
+
+            /*
+             * A layout engine should return one location per managed
+             * window, but limit the loop defensively in case it does not.
+             */
+            var count = System.Math.Min(
+                windows.Count,
+                layout.Count);
+
+            for (var index = 0;
+                 index < count;
+                 index++)
+            {
+                var slot = layout[index];
+
+                if (slot.Width <= 0 ||
+                    slot.Height <= 0)
                 {
-                    Logger.Debug("SwapWindowToPoint[{0},{1} - {2}]", x, y, window);
-                    SwapWindows(window, destWindow);
+                    continue;
                 }
+
+                var slotBounds = new Rectangle(
+                    monitor.X + slot.X,
+                    monitor.Y + slot.Y,
+                    slot.Width,
+                    slot.Height);
+
+                if (!slotBounds.Contains(x, y))
+                {
+                    continue;
+                }
+
+                bounds = slotBounds;
+
+                double u =
+                    (double)(x - bounds.Left) /
+                    bounds.Width;
+
+                double v =
+                    (double)(y - bounds.Top) /
+                    bounds.Height;
+
+                center =
+                    u >= 0.25 &&
+                    u <= 0.75 &&
+                    v >= 0.25 &&
+                    v <= 0.75;
+
+                /*
+                 * Outside the center, choose the closest logical edge.
+                 *
+                 * A greater horizontal displacement means left/right.
+                 * Otherwise the pointer indicates above/below.
+                 */
+                before =
+                    System.Math.Abs(u - 0.5) >
+                    System.Math.Abs(v - 0.5)
+                        ? u < 0.5
+                        : v < 0.5;
+
+                return windows[index];
+            }
+
+            return null;
+        }
+
+        private bool InsertWindow(
+            IWindow window,
+            IWindow target,
+            bool before)
+        {
+            lock (_windows)
+            {
+                if (window == null ||
+                    target == null ||
+                    window == target)
+                {
+                    return false;
+                }
+
+                var windowIndex =
+                    _windows.IndexOf(window);
+
+                var targetIndex =
+                    _windows.IndexOf(target);
+
+                if (windowIndex < 0 ||
+                    targetIndex < 0)
+                {
+                    return false;
+                }
+
+                /*
+                 * Remove the moved window first because this may change
+                 * the target's index.
+                 */
+                _windows.RemoveAt(windowIndex);
+
+                targetIndex = _windows.IndexOf(target);
+
+                if (targetIndex < 0)
+                {
+                    /*
+                     * Defensively restore the window to its previous
+                     * position if the target unexpectedly disappeared.
+                     */
+                    _windows.Insert(
+                        System.Math.Min(
+                            windowIndex,
+                            _windows.Count),
+                        window);
+
+                    return false;
+                }
+
+                var insertionIndex =
+                    targetIndex +
+                    (before ? 0 : 1);
+
+                _windows.Insert(
+                    insertionIndex,
+                    window);
+
+                return true;
             }
         }
 
         public bool IsPointInside(int x, int y)
         {
-            var monitor = _context.WorkspaceContainer.GetCurrentMonitorForWorkspace(this);
+            var monitor = _context.WorkspaceContainer
+                .GetCurrentMonitorForWorkspace(this);
 
-            if (monitor != null)
-            {
-                return monitor.X <= x && x <= (monitor.X + monitor.Width) && monitor.Y <= y && y <= (monitor.Y + monitor.Height);
-            } else
+            if (monitor == null)
             {
                 return false;
             }
-        }
 
-        private int GetLayoutSlotIndexForPoint(int x, int y)
-        {
-            var locations = CalcLayout();
-            if (locations == null)
-                return -1;
-            var monitor = _context.WorkspaceContainer.GetCurrentMonitorForWorkspace(this);
-            if (monitor == null)
-                return -1;
-
-            var adjustedLocations = locations.Select(loc => new WindowLocation(loc.X + monitor.X, loc.Y + monitor.Y,
-                                loc.Width, loc.Height, loc.State)).ToList();
-
-            var firstFit = adjustedLocations.FindIndex(l => l.IsPointInside(x, y));
-            return firstFit;
+            return
+                monitor.X <= x &&
+                x < monitor.X + monitor.Width &&
+                monitor.Y <= y &&
+                y < monitor.Y + monitor.Height;
         }
 
         private IEnumerable<IWindowLocation> CalcLayout()
         {
             var windows = ManagedWindows;
-            var monitor = _context.WorkspaceContainer.GetCurrentMonitorForWorkspace(this);
-            if (monitor != null)
+
+            var monitor = _context.WorkspaceContainer
+                .GetCurrentMonitorForWorkspace(this);
+
+            if (monitor == null)
             {
-                return GetLayoutEngine().CalcLayout(windows, monitor.Width, monitor.Height);
+                return null;
             }
-            return null;
+
+            return GetLayoutEngine().CalcLayout(
+                windows,
+                monitor.Width,
+                monitor.Height);
         }
 
         public void DoLayout()
         {
-            // Skip layout if the focussed window is fullscreen.
+            // Skip layout if the focused window is fullscreen.
             if (FocusedWindow?.IsFullscreen ?? false)
             {
                 OnLayoutCompleted?.Invoke(this);
@@ -384,42 +677,79 @@ namespace workspacer
             }
 
             var windows = ManagedWindows.ToList();
+
             if (_context.Enabled)
             {
-                var monitor = _context.WorkspaceContainer.GetCurrentMonitorForWorkspace(this);
+                var monitor = _context.WorkspaceContainer
+                    .GetCurrentMonitorForWorkspace(this);
+
                 if (monitor != null)
                 {
-                    windows.ForEach(w => w.ShowInCurrentState());
+                    windows.ForEach(
+                        window =>
+                            window.ShowInCurrentState());
 
-                    var locations = GetLayoutEngine().CalcLayout(windows, monitor.Width, monitor.Height)
+                    var locations = GetLayoutEngine()
+                        .CalcLayout(
+                            windows,
+                            monitor.Width,
+                            monitor.Height)
                         .ToArray();
 
-                    using (var handle = _context.Windows.DeferWindowsPos(windows.Count))
+                    /*
+                     * Be defensive if a layout engine returns a different
+                     * number of locations than the number of windows.
+                     */
+                    var count = System.Math.Min(
+                        windows.Count,
+                        locations.Length);
+
+                    using (var handle =
+                        _context.Windows.DeferWindowsPos(count))
                     {
-                        for (var i = 0; i < locations.Length; i++)
+                        for (var index = 0;
+                             index < count;
+                             index++)
                         {
-                            var window = windows[i];
-                            var loc = locations[i];
+                            var window = windows[index];
+                            var location = locations[index];
 
-                            var adjustedLoc = new WindowLocation(loc.X + monitor.X, loc.Y + monitor.Y,
-                                loc.Width, loc.Height, loc.State);
+                            var adjustedLocation =
+                                new WindowLocation(
+                                    location.X + monitor.X,
+                                    location.Y + monitor.Y,
+                                    location.Width,
+                                    location.Height,
+                                    location.State);
 
-                            if (!window.IsMouseMoving && !window.IsFullscreen)
+                            /*
+                             * While dragging, the layout is previewed by
+                             * moving all other windows but leaving the
+                             * dragged window under the mouse.
+                             */
+                            if (!window.IsMouseMoving &&
+                                !window.IsFullscreen)
                             {
-                                handle.DeferWindowPos(window, adjustedLoc);
+                                handle.DeferWindowPos(
+                                    window,
+                                    adjustedLocation);
                             }
                         }
                     }
                 }
                 else
                 {
-                    windows.ForEach(w => w.Hide());
+                    windows.ForEach(
+                        window => window.Hide());
                 }
+
                 OnLayoutCompleted?.Invoke(this);
             }
             else
             {
-                windows.ForEach(w => w.ShowInCurrentState());
+                windows.ForEach(
+                    window =>
+                        window.ShowInCurrentState());
             }
         }
 
@@ -430,22 +760,45 @@ namespace workspacer
             return Name;
         }
 
-        private void SwapWindows(IWindow left, IWindow right)
+        private bool SwapWindows(
+            IWindow left,
+            IWindow right)
         {
+            if (left == null ||
+                right == null ||
+                left == right)
+            {
+                return false;
+            }
+
             lock (_windows)
             {
-                Logger.Trace("SwapWindows[{0},{1}]", left, right);
-                var leftIdx = _windows.FindIndex(w => w == left);
-                var rightIdx = _windows.FindIndex(w => w == right);
+                Logger.Trace(
+                    "SwapWindows[{0},{1}]",
+                    left,
+                    right);
 
-                _windows[leftIdx] = right;
-                _windows[rightIdx] = left;
+                var leftIndex =
+                    _windows.IndexOf(left);
+
+                var rightIndex =
+                    _windows.IndexOf(right);
+
+                if (leftIndex < 0 ||
+                    rightIndex < 0)
+                {
+                    return false;
+                }
+
+                _windows[leftIndex] = right;
+                _windows[rightIndex] = left;
 
                 right.NotifyUpdated();
                 left.NotifyUpdated();
             }
 
             DoLayout();
+            return true;
         }
 
         private ILayoutEngine GetLayoutEngine()

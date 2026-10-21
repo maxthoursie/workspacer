@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Drawing;
 
 namespace workspacer
 {
@@ -48,6 +49,7 @@ namespace workspacer
 
         void AddWindow(IWindow window, bool layout = true);
         void RemoveWindow(IWindow window, bool layout = true);
+        void SetWindows(IEnumerable<IWindow> windows);
         void UpdateWindow(IWindow window, WindowUpdateType type, bool layout = true);
 
         /// <summary>
@@ -143,6 +145,8 @@ namespace workspacer
         /// <param name="y">y coordinate of the point</param>
         void SwapWindowToPoint(IWindow window, int x, int y);
 
+        IWindow GetDropTarget(int x, int y, out bool center, out bool before, out Rectangle bounds);
+        bool ApplyDrop(IWindow window, IWindow target, bool center, bool before);
         /// <summary>
         /// check if the given point is in the workspace
         /// </summary>
