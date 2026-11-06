@@ -9,7 +9,7 @@ namespace workspacer
 {
     public static class ConfigHelper
     {
-        private static readonly string ConfigFileName = "workspacer.config.csx";
+        private static readonly string ConfigFileName = "workspacer.config.cs";
 
         private static string GetPathInUserFolder(string file)
         {
@@ -54,15 +54,32 @@ namespace workspacer
         private static string LoadConfig()
         {
             var path = GetPathInUserFolder(ConfigFileName);
-            var file = File.Exists(path) ? File.ReadAllText(path) : GetConfigTemplate();
-            return file;
+            var file = File.Exists(path)
+                ? File.ReadAllText(path)
+                : GetConfigTemplate();
+
+            return string.Join(Environment.NewLine,
+                file.Split('\n')
+                    .Where(line => !line.TrimStart().StartsWith("#:")));
         }
 
         public static void DoConfig(IConfigContext context)
         {
             var config = LoadConfig();
 
-            var options = ScriptOptions.Default;
+            var resolver = ScriptMetadataResolver.Default.WithBaseDirectory(AppContext.BaseDirectory);
+
+            var pluginAssemblies = Directory.GetFiles(
+                    Path.Combine(AppContext.BaseDirectory, "plugins"),
+                    "*.dll", SearchOption.AllDirectories);
+
+            var options = ScriptOptions.Default
+                .WithMetadataResolver(resolver)
+                .AddReferences(
+                    typeof(object).Assembly,
+                    typeof(IConfigContext).Assembly)
+                .AddReferences(pluginAssemblies);
+
             var task = CSharpScript.EvaluateAsync<Action<IConfigContext>>(config, options);
             var func = task.Result;
             func(context);
