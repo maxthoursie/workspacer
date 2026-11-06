@@ -155,5 +155,13 @@ namespace workspacer
         /// <param name="y">y coordinate of the point</param>
         /// <returns>true if the point is inside the workspace, false otherwise</returns>
         bool IsPointInside(int x, int y);
+
+        /// <summary>
+        /// Attempts to move the focused window within this workspace.
+        ///
+        /// Returns false when there is no window in the requested direction.
+        /// The caller may then move the window to an adjacent monitor.
+        /// </summary>
+        bool TryMoveFocusedWindow(Direction direction);
     }
 }

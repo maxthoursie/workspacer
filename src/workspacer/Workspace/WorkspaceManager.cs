@@ -528,8 +528,7 @@ namespace workspacer
 
         public void MoveFocusedWindowToPreviousMonitor()
         {
-            Logger.Debug(
-                "MoveFocusedWindowToPreviousMonitor");
+            Logger.Debug("MoveFocusedWindowToPreviousMonitor");
 
             var sourceWorkspace = FocusedWorkspace;
             var window = sourceWorkspace.FocusedWindow;
@@ -570,6 +569,224 @@ namespace workspacer
 
                 FocusedMonitorUpdated?.Invoke();
             }
+        }
+
+        public void MoveFocusedWindow(Direction direction)
+        {
+            Logger.Debug("MoveFocusedWindow({0})", direction);
+
+            var sourceWorkspace = FocusedWorkspace;
+
+            if (sourceWorkspace == null) return;
+
+            var locallyMovedWindow = sourceWorkspace.FocusedWindow;
+            if (sourceWorkspace.TryMoveFocusedWindow(direction))
+            {
+                if (locallyMovedWindow != null)
+                    FocusAndCenterMouse(locallyMovedWindow);
+                return;
+            }
+
+            var window = sourceWorkspace.FocusedWindow;
+            if (window == null) return;
+
+            var sourceMonitor = _context.WorkspaceContainer.GetCurrentMonitorForWorkspace(sourceWorkspace);
+            if (sourceMonitor == null) return;
+
+            var targetMonitor = FindMonitorInDirection(sourceMonitor, direction);
+            if (targetMonitor == null) return;
+
+            MoveFocusedWindowToMonitor(sourceWorkspace, window, targetMonitor, direction);
+        }
+
+        private IMonitor FindMonitorInDirection(
+            IMonitor source,
+            Direction direction)
+        {
+            return _context.MonitorContainer
+                .GetAllMonitors()
+                .Where(candidate => candidate != source)
+                .Where(candidate =>
+                    IsMonitorInDirection(
+                        source,
+                        candidate,
+                        direction))
+                .OrderBy(candidate =>
+                    GetMonitorEdgeDistance(
+                        source,
+                        candidate,
+                        direction))
+                .ThenBy(candidate =>
+                    GetMonitorAlignmentDistance(
+                        source,
+                        candidate,
+                        direction))
+                .FirstOrDefault();
+        }
+
+        private static bool IsMonitorInDirection(
+            IMonitor source,
+            IMonitor candidate,
+            Direction direction)
+        {
+            var sourceLeft = source.X;
+            var sourceTop = source.Y;
+            var sourceRight = source.X + source.Width;
+            var sourceBottom = source.Y + source.Height;
+
+            var candidateLeft = candidate.X;
+            var candidateTop = candidate.Y;
+            var candidateRight =
+                candidate.X + candidate.Width;
+            var candidateBottom =
+                candidate.Y + candidate.Height;
+
+            var overlapsHorizontally =
+                candidateLeft < sourceRight &&
+                candidateRight > sourceLeft;
+
+            var overlapsVertically =
+                candidateTop < sourceBottom &&
+                candidateBottom > sourceTop;
+
+            switch (direction)
+            {
+                case Direction.Left:
+                    return overlapsVertically &&
+                           candidateRight <= sourceLeft;
+
+                case Direction.Right:
+                    return overlapsVertically &&
+                           candidateLeft >= sourceRight;
+
+                case Direction.Up:
+                    return overlapsHorizontally &&
+                           candidateBottom <= sourceTop;
+
+                case Direction.Down:
+                    return overlapsHorizontally &&
+                           candidateTop >= sourceBottom;
+
+                default:
+                    return false;
+            }
+        }
+
+        private static int GetMonitorEdgeDistance(
+            IMonitor source,
+            IMonitor candidate,
+            Direction direction)
+        {
+            switch (direction)
+            {
+                case Direction.Left:
+                    return source.X -
+                        (candidate.X + candidate.Width);
+
+                case Direction.Right:
+                    return candidate.X -
+                        (source.X + source.Width);
+
+                case Direction.Up:
+                    return source.Y -
+                        (candidate.Y + candidate.Height);
+
+                case Direction.Down:
+                    return candidate.Y -
+                        (source.Y + source.Height);
+
+                default:
+                    return int.MaxValue;
+            }
+        }
+
+        private static double GetMonitorAlignmentDistance(
+            IMonitor source,
+            IMonitor candidate,
+            Direction direction)
+        {
+            var sourceCenterX =
+                source.X + source.Width / 2.0;
+            var sourceCenterY =
+                source.Y + source.Height / 2.0;
+
+            var candidateCenterX =
+                candidate.X + candidate.Width / 2.0;
+            var candidateCenterY =
+                candidate.Y + candidate.Height / 2.0;
+
+            switch (direction)
+            {
+                case Direction.Left:
+                case Direction.Right:
+                    return System.Math.Abs(
+                        candidateCenterY - sourceCenterY);
+
+                case Direction.Up:
+                case Direction.Down:
+                    return System.Math.Abs(
+                        candidateCenterX - sourceCenterX);
+
+                default:
+                    return double.MaxValue;
+            }
+        }
+
+        private void MoveFocusedWindowToMonitor(IWorkspace sourceWorkspace, IWindow window, IMonitor targetMonitor, Direction direction)
+        {
+            Logger.Debug("MoveFocusedWindowToMonitor ({})", window);
+
+            var targetWorkspace = _context.WorkspaceContainer.GetWorkspaceForMonitor(targetMonitor);
+            if (targetWorkspace == null || targetWorkspace == sourceWorkspace) return;
+
+            var sourceWindows = sourceWorkspace.Windows.ToList();
+            var targetWindows = targetWorkspace.Windows.ToList();
+            if (!sourceWindows.Remove(window)) return;
+
+            targetWindows.Remove(window);
+
+            var targetIndex = GetDestinationIndex(targetWindows, direction);
+            targetWindows.Insert(targetIndex, window);
+
+            sourceWorkspace.SetWindows(sourceWindows);
+            targetWorkspace.SetWindows(targetWindows);
+
+            _windowsToWorkspaces[window] = targetWorkspace;
+
+            sourceWorkspace.DoLayout();
+            targetWorkspace.DoLayout();
+
+            WindowMoved?.Invoke(window, sourceWorkspace, targetWorkspace);
+
+            _context.MonitorContainer.FocusedMonitor = targetMonitor;
+            FocusedMonitorUpdated?.Invoke();
+
+            FocusAndCenterMouse(window);
+        }
+
+        private static int GetDestinationIndex(IList<IWindow> targetWindows, Direction direction)
+        {
+            switch (direction)
+            {
+                case Direction.Right:
+                case Direction.Down:
+                    return 0;
+
+                default:
+                    return targetWindows.Count;
+            }
+        }
+
+        private static void FocusAndCenterMouse(IWindow window)
+        {
+            Logger.Debug("FocusAndCenterMouse ({})", window);
+
+            window.Focus();
+
+            var location = window.Location;
+            if (location.Width <= 0 || location.Height <= 0) return;
+
+            Cursor.Position = new Point(location.X + location.Width / 2, location.Y + location.Height / 2);
         }
 
         public void MoveAllWindows(

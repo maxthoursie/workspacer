@@ -29,6 +29,7 @@
         void MoveAllWindows(IWorkspace source, IWorkspace dest);
         void MoveFocusedWindowToNextMonitor();
         void MoveFocusedWindowToPreviousMonitor();
+        void MoveFocusedWindow(Direction direction);
 
         void ForceWorkspaceUpdate();
 

@@ -660,6 +660,243 @@ namespace workspacer
                 y < monitor.Y + monitor.Height;
         }
 
+        public bool TryMoveFocusedWindow(Direction direction)
+        {
+            var windows = ManagedWindows.ToList();
+            var focused = windows.FirstOrDefault(window => window.IsFocused);
+
+            if (focused == null || windows.Count <= 1)
+            {
+                return false;
+            }
+
+            var monitor = _context.WorkspaceContainer
+                .GetCurrentMonitorForWorkspace(this);
+
+            if (monitor == null)
+            {
+                return false;
+            }
+
+            var locations = GetLayoutEngine()
+                .CalcLayout(
+                    windows,
+                    monitor.Width,
+                    monitor.Height)
+                .ToList();
+
+            var count = System.Math.Min(
+                windows.Count,
+                locations.Count);
+
+            var focusedIndex = windows.IndexOf(focused);
+
+            if (focusedIndex < 0 || focusedIndex >= count)
+            {
+                return false;
+            }
+
+            var focusedBounds = ToRectangle(locations[focusedIndex]);
+
+            IWindow target;
+            bool before;
+
+            switch (direction)
+            {
+                case Direction.Left:
+                case Direction.Right:
+                    target = FindHorizontalMoveTarget(
+                        windows,
+                        locations,
+                        count,
+                        focusedIndex,
+                        focusedBounds,
+                        direction,
+                        out before);
+                    break;
+
+                case Direction.Up:
+                case Direction.Down:
+                    target = FindVerticalMoveTarget(
+                        windows,
+                        locations,
+                        count,
+                        focusedIndex,
+                        focusedBounds,
+                        direction,
+                        out before);
+                    break;
+
+                default:
+                    return false;
+            }
+
+            if (target == null)
+            {
+                return false;
+            }
+
+            if (!InsertWindow(focused, target, before))
+            {
+                return false;
+            }
+
+            DoLayout();
+
+            return true;
+        }
+
+        private static IWindow FindHorizontalMoveTarget(
+            IList<IWindow> windows,
+            IList<IWindowLocation> locations,
+            int count,
+            int focusedIndex,
+            Rectangle focusedBounds,
+            Direction direction,
+            out bool before)
+        {
+            before = true;
+
+            var focusedCenterX =
+                focusedBounds.Left + focusedBounds.Width / 2.0;
+
+            var candidates = Enumerable.Range(0, count)
+                .Where(index => index != focusedIndex)
+                .Select(index => new
+                {
+                    Index = index,
+                    Bounds = ToRectangle(locations[index])
+                })
+                .Where(candidate =>
+                {
+                    var centerX =
+                        candidate.Bounds.Left +
+                        candidate.Bounds.Width / 2.0;
+
+                    return direction == Direction.Left
+                        ? centerX < focusedCenterX
+                        : centerX > focusedCenterX;
+                })
+                .ToList();
+
+            if (candidates.Count == 0)
+            {
+                return null;
+            }
+
+            /*
+             * Select the nearest column in the requested direction.
+             * For Tall this selects primary when moving left from secondary,
+             * and secondary when moving right from primary.
+             */
+            var targetColumnX = direction == Direction.Left
+                ? candidates.Max(candidate =>
+                    candidate.Bounds.Left +
+                    candidate.Bounds.Width / 2.0)
+                : candidates.Min(candidate =>
+                    candidate.Bounds.Left +
+                    candidate.Bounds.Width / 2.0);
+
+            const double tolerance = 1.0;
+
+            var column = candidates
+                .Where(candidate =>
+                    System.Math.Abs(
+                        candidate.Bounds.Left +
+                        candidate.Bounds.Width / 2.0 -
+                        targetColumnX) < tolerance)
+                .OrderBy(candidate => candidate.Bounds.Top)
+                .ToList();
+
+            if (column.Count == 0)
+            {
+                return null;
+            }
+
+            if (direction == Direction.Left)
+            {
+                /*
+                 * Insert immediately before the final window in the column
+                 * to the left.
+                 */
+                before = true;
+                return windows[column[column.Count - 1].Index];
+            }
+
+            /*
+             * Insert immediately after the first window in the column
+             * to the right.
+             */
+            before = false;
+            return windows[column[0].Index];
+        }
+
+        private static IWindow FindVerticalMoveTarget(
+            IList<IWindow> windows,
+            IList<IWindowLocation> locations,
+            int count,
+            int focusedIndex,
+            Rectangle focusedBounds,
+            Direction direction,
+            out bool before)
+        {
+            before = direction == Direction.Up;
+
+            var focusedCenterX =
+                focusedBounds.Left + focusedBounds.Width / 2.0;
+            var focusedCenterY =
+                focusedBounds.Top + focusedBounds.Height / 2.0;
+
+            var candidate = Enumerable.Range(0, count)
+                .Where(index => index != focusedIndex)
+                .Select(index => new
+                {
+                    Index = index,
+                    Bounds = ToRectangle(locations[index])
+                })
+                /*
+                 * Require horizontal overlap. This keeps movement within
+                 * the current Tall column.
+                 */
+                .Where(item =>
+                    item.Bounds.Left < focusedBounds.Right &&
+                    item.Bounds.Right > focusedBounds.Left)
+                .Select(item => new
+                {
+                    item.Index,
+                    item.Bounds,
+                    CenterX =
+                        item.Bounds.Left +
+                        item.Bounds.Width / 2.0,
+                    CenterY =
+                        item.Bounds.Top +
+                        item.Bounds.Height / 2.0
+                })
+                .Where(item =>
+                    direction == Direction.Up
+                        ? item.CenterY < focusedCenterY
+                        : item.CenterY > focusedCenterY)
+                .OrderBy(item =>
+                    System.Math.Abs(item.CenterY - focusedCenterY))
+                .ThenBy(item =>
+                    System.Math.Abs(item.CenterX - focusedCenterX))
+                .FirstOrDefault();
+
+            return candidate == null
+                ? null
+                : windows[candidate.Index];
+        }
+
+        private static Rectangle ToRectangle(
+            IWindowLocation location)
+        {
+            return new Rectangle(
+                location.X,
+                location.Y,
+                location.Width,
+                location.Height);
+        }
+
         private IEnumerable<IWindowLocation> CalcLayout()
         {
             var windows = ManagedWindows;

@@ -197,8 +197,6 @@ You can either change your custom hotkey or reassign the default hotkey";
                         modifiersPressed |= KeyModifiers.RWin;
                     }
 
-                    Logger.Info($"Keydown: {GetKeybindString(modifiersPressed, key)}  vk=0x{Marshal.ReadInt32(lParam):X}");
-
                     if (DoKeyboardEvent(key, modifiersPressed))
                     {
                         return new IntPtr(1);
@@ -224,6 +222,8 @@ You can either change your custom hotkey or reassign the default hotkey";
         {
             if (modifiersPressed != KeyModifiers.None)
             {
+                Logger.Debug("Keydown: {0}", GetKeybindString(modifiersPressed, key));
+
                 var sub = new Sub(modifiersPressed, key);
                 if (_kbdSubs.ContainsKey(sub))
                 {
