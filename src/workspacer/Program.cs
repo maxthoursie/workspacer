@@ -28,47 +28,48 @@ namespace workspacer
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            ConfigContext context = new ConfigContext();
-            try
-            {
-                ConfigHelper.DoConfig(context);
-            }
-            catch(Exception ex)
-            {
-                MessageBox.Show(ex.ToString(), "Startup error");
-            }
-            _branch = context.Branch;
-            context.SystemTray.Dispose();
+// Creating an extra ConfigContext for just this creates unnecessary handlers.
+//             ConfigContext context = new ConfigContext();
+//             try
+//             {
+//                 ConfigHelper.DoConfig(context);
+//             }
+//             catch(Exception ex)
+//             {
+//                 MessageBox.Show(ex.ToString(), "Startup error");
+//             }
+//             _branch = context.Branch;
+//             context.SystemTray.Dispose();
 
-            // check for updates
-            if (_branch is null)
-            {
-#if BRANCH_unstable
-                _branch = Branch.Unstable;
-#elif BRANCH_stable
-                _branch = Branch.Stable;
-#elif BRANCH_beta
-                _branch = Branch.Beta;
-#else
-                _branch = Branch.None;
-#endif
-            }
+//             // check for updates
+//             if (_branch is null)
+//             {
+// #if BRANCH_unstable
+//                 _branch = Branch.Unstable;
+// #elif BRANCH_stable
+//                 _branch = Branch.Stable;
+// #elif BRANCH_beta
+//                 _branch = Branch.Beta;
+// #else
+//                 _branch = Branch.None;
+// #endif
+//             }
 
-            if (_branch != Branch.None)
-            {
-                AutoUpdater.RunUpdateAsAdmin = !IsDirectoryWritable(AppContext.BaseDirectory);
-                AutoUpdater.ParseUpdateInfoEvent += AutoUpdater_ParseUpdateInfoEvent;
-                AutoUpdater.ApplicationExitEvent += AutoUpdater_ApplicationExitEvent;
+//             if (_branch != Branch.None)
+//             {
+//                 AutoUpdater.RunUpdateAsAdmin = !IsDirectoryWritable(AppContext.BaseDirectory);
+//                 AutoUpdater.ParseUpdateInfoEvent += AutoUpdater_ParseUpdateInfoEvent;
+//                 AutoUpdater.ApplicationExitEvent += AutoUpdater_ApplicationExitEvent;
 
-                Timer timer = new Timer(1000 * 60 * 60);
-                timer.Elapsed += (_, _) =>
-                {
-                    AutoUpdater.Start("https://raw.githubusercontent.com/workspacer/workspacer/master/README.md");
-                };
-                timer.Enabled = true;
-                // Put url to trigger ParseUpdateInfoEvent
-                AutoUpdater.Start("https://raw.githubusercontent.com/workspacer/workspacer/master/README.md");
-            }
+//                 Timer timer = new Timer(1000 * 60 * 60);
+//                 timer.Elapsed += (_, _) =>
+//                 {
+//                     AutoUpdater.Start("https://raw.githubusercontent.com/workspacer/workspacer/master/README.md");
+//                 };
+//                 timer.Enabled = true;
+//                 // Put url to trigger ParseUpdateInfoEvent
+//                 AutoUpdater.Start("https://raw.githubusercontent.com/workspacer/workspacer/master/README.md");
+//             }
 
             Run();
         }

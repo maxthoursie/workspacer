@@ -13,18 +13,20 @@ namespace workspacer
         {
             public int message { get; set; }
         }
-        
+
         [DllImport("user32.dll")]
         public static extern bool GetMessage(ref Message lpMsg, IntPtr handle, uint mMsgFilterInMain, uint mMsgFilterMax);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-		public static extern bool SendNotifyMessage(IntPtr hWnd, uint Msg, UIntPtr wParam, IntPtr lParam);
+        public static extern bool SendNotifyMessage(IntPtr hWnd, uint Msg, UIntPtr wParam, IntPtr lParam);
 
         public static readonly int WH_KEYBOARD_LL = 13;
         public static readonly int WH_MOUSE_LL = 14;
         public static readonly uint WM_KEYDOWN = 0x100;
+        public static readonly uint WM_KEYUP = 0x0101;
         public static readonly uint WM_SYSKEYDOWN = 0x104;
+        public static readonly uint WM_SYSKEYUP = 0x0105;
         public static readonly uint WM_SYSCOMMAND = 0x0112;
 
         public static readonly uint WM_LBUTTONDOWN = 0x0201;
@@ -35,25 +37,25 @@ namespace workspacer
         public static readonly uint WM_RBUTTONDOWN = 0x0204;
         public static readonly uint WM_RBUTTONUP = 0x0205;
 
-        public static readonly UIntPtr SC_MINIMIZE = (UIntPtr) 0xF020;
-		public static readonly IntPtr SC_MINIMIZESigned = (IntPtr) 0xF020;
-		public static readonly UIntPtr SC_MAXIMIZE = (UIntPtr) 0xF030;
-		public static readonly IntPtr SC_MAXIMIZESigned = (IntPtr) 0xF030;
-		public static readonly UIntPtr SC_RESTORE = (UIntPtr) 0xF120;
-		public static readonly UIntPtr SC_CLOSE = (UIntPtr) 0xF060;
+        public static readonly UIntPtr SC_MINIMIZE = (UIntPtr)0xF020;
+        public static readonly IntPtr SC_MINIMIZESigned = (IntPtr)0xF020;
+        public static readonly UIntPtr SC_MAXIMIZE = (UIntPtr)0xF030;
+        public static readonly IntPtr SC_MAXIMIZESigned = (IntPtr)0xF030;
+        public static readonly UIntPtr SC_RESTORE = (UIntPtr)0xF120;
+        public static readonly UIntPtr SC_CLOSE = (UIntPtr)0xF060;
 
-		public delegate IntPtr HookProc(int code, UIntPtr wParam, IntPtr lParam);
+        public delegate IntPtr HookProc(int code, UIntPtr wParam, IntPtr lParam);
 
-		[DllImport("user32.dll")]
-		public static extern IntPtr SetWindowsHookEx(int hookType, [MarshalAs(UnmanagedType.FunctionPtr)] HookProc lpfn, IntPtr hMod, int dwThreadId);
+        [DllImport("user32.dll")]
+        public static extern IntPtr SetWindowsHookEx(int hookType, [MarshalAs(UnmanagedType.FunctionPtr)] HookProc lpfn, IntPtr hMod, int dwThreadId);
 
         [DllImport("user32.dll")]
         public static extern IntPtr CallNextHookEx([Optional] IntPtr hhk, int nCode, UIntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll")]
-		public static extern short GetKeyState(System.Windows.Forms.Keys nVirtKey);
+        public static extern short GetKeyState(System.Windows.Forms.Keys nVirtKey);
 
-        [DllImport("user32.dll", SetLastError=true)]
+        [DllImport("user32.dll", SetLastError = true)]
         public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         [DllImport("kernel32.dll")]

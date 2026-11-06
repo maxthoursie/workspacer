@@ -60,9 +60,9 @@ namespace workspacer
             {
                 new Tuple<string, Action>("ok", () => { }),
             });
-          
+
             _keybindWarning.Show();
-            
+
         }
 
         public void Subscribe(KeyModifiers mod, Keys key, KeybindHandler handler, string name)
@@ -70,8 +70,8 @@ namespace workspacer
             var sub = new Sub(mod, key);
             if (_kbdSubs.ContainsKey(sub))
             {
-               Logger.Error($" The Key Combination `{mod}-{key}` is already bound to action: `{name}`");
-               string warning = @$" The Key Combination `{mod}-{key}` is already bound to action: `{name}`. To fix this go into your config file and compare assignments of hotkeys
+                Logger.Error($" The Key Combination `{mod}-{key}` is already bound to action: `{name}`");
+                string warning = @$" The Key Combination `{mod}-{key}` is already bound to action: `{name}`. To fix this go into your config file and compare assignments of hotkeys
 You can either change your custom hotkey or reassign the default hotkey";
 
                 ShowKeybindWarning(warning);
@@ -120,14 +120,43 @@ You can either change your custom hotkey or reassign the default hotkey";
 
         public bool KeyIsPressed(Keys key)
         {
-             return (Win32.GetKeyState(KeysToKeys(key)) & 0x8000) == 0x8000;
+            return (Win32.GetKeyState(KeysToKeys(key)) & 0x8000) == 0x8000;
         }
+
+        private bool _leftWinDown;
+        private bool _rightWinDown;
 
         private IntPtr KbdHook(int nCode, UIntPtr wParam, IntPtr lParam)
         {
+            if (nCode < 0) return Win32.CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+
+            var key = (Keys)Marshal.ReadInt32(lParam);
+            var message = (uint)wParam;
+
+            // The windows keys precense in ReadInt32 is apparently not reliable
+            bool keyDown = message == Win32.WM_KEYDOWN ||
+                           message == Win32.WM_SYSKEYDOWN;
+            bool keyUp = message == Win32.WM_KEYUP ||
+                         message == Win32.WM_SYSKEYUP;
+
+            if (key == Keys.LWin && (keyDown || keyUp)) _leftWinDown = keyDown;
+            if (key == Keys.RWin && (keyDown || keyUp)) _rightWinDown = keyDown;
+
+            // Hack to disable the windows menu on a single windows key press
+            if (key == Keys.LWin && keyUp)
+            {
+                if (!WindowsInput.SendMenuMaskKey(out var error))
+                {
+                    Logger.Error(
+                        $"Failed to inject Windows-key menu mask: " +
+                        $"Win32 error {error}, " +
+                        $"INPUT size {WindowsInput.InputStructureSize}"
+                    );
+                }
+            }
+
             if (nCode == 0 && ((uint)wParam == Win32.WM_KEYDOWN || (uint)wParam == Win32.WM_SYSKEYDOWN))
             {
-                var key = (Keys) Marshal.ReadInt32(lParam);
                 if (key != Keys.LShiftKey && key != Keys.RShiftKey &&
                     key != Keys.LMenu && key != Keys.RMenu &&
                     key != Keys.LControlKey && key != Keys.RControlKey &&
@@ -159,14 +188,16 @@ You can either change your custom hotkey or reassign the default hotkey";
                     {
                         modifiersPressed |= KeyModifiers.RControl;
                     }
-                    if ((Win32.GetKeyState(KeysToKeys(Keys.LWin)) & 0x8000) == 0x8000)
+                    if (_leftWinDown || (Win32.GetKeyState(KeysToKeys(Keys.LWin)) & 0x8000) == 0x8000)
                     {
                         modifiersPressed |= KeyModifiers.LWin;
                     }
-                    if ((Win32.GetKeyState(KeysToKeys(Keys.RWin)) & 0x8000) == 0x8000)
+                    if (_rightWinDown || (Win32.GetKeyState(KeysToKeys(Keys.RWin)) & 0x8000) == 0x8000)
                     {
                         modifiersPressed |= KeyModifiers.RWin;
                     }
+
+                    Logger.Info($"Keydown: {GetKeybindString(modifiersPressed, key)}  vk=0x{Marshal.ReadInt32(lParam):X}");
 
                     if (DoKeyboardEvent(key, modifiersPressed))
                     {
@@ -378,17 +409,15 @@ You can either change your custom hotkey or reassign the default hotkey";
         {
             var parts = new List<string>();
 
-            if (mods.HasFlag(KeyModifiers.Win))
-                parts.Add("Win");
-            if (mods.HasFlag(KeyModifiers.LAlt))
-                parts.Add("Alt");
-            if (mods.HasFlag(KeyModifiers.LShift))
-                parts.Add("Shift");
+            if ((mods & KeyModifiers.Win) != 0) parts.Add("Win");
+            if ((mods & KeyModifiers.Control) != 0) parts.Add("Ctrl");
+            if ((mods & KeyModifiers.Alt) != 0) parts.Add("Alt");
+            if ((mods & KeyModifiers.Shift) != 0) parts.Add("Shift");
 
             if (keys == Keys.Oemcomma) { parts.Add(","); }
             else if (keys == Keys.OemPeriod) { parts.Add("."); }
             else if (keys == Keys.Oem2) { parts.Add("/"); }
-            else if (new Regex("\\d").IsMatch(keys.ToString().Capitalize()))
+            else if (new Regex("(D|NumPad)\\d").IsMatch(keys.ToString().Capitalize()))
             {
                 parts.Add(keys.ToString().Capitalize()[1].ToString());
             }
