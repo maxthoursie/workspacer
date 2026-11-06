@@ -4,7 +4,7 @@ using System.Drawing;
 namespace workspacer
 {
     public delegate void OnLayoutCompletedDelegate(IWorkspace workspace);
-    
+
     /// <summary>
     /// IWorkspace provides a common interface for workspace-related operations.
     /// workspaces logically contain a set of windows, and allow callers to interact with the 
@@ -22,6 +22,8 @@ namespace workspacer
         /// </summary>
         string LayoutName { get; }
 
+        bool TrySetLayout(string name);
+        
         /// <summary>
         /// set of windows that are contained within the workspace
         /// </summary>
@@ -75,7 +77,7 @@ namespace workspacer
         /// <summary>
         /// focus the last focused window
         /// </summary>
-        void FocusLastFocusedWindow(); 
+        void FocusLastFocusedWindow();
 
         /// <summary>
         /// rotate focus to the next window

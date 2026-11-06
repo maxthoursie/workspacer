@@ -175,6 +175,7 @@ namespace workspacer
 
         public void Quit()
         {
+            SaveState();
             var response = new LauncherResponse()
             {
                 Action = LauncherAction.Quit,
@@ -251,6 +252,7 @@ namespace workspacer
         {
             var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "workspacer.State.json");
             var json = JsonConvert.SerializeObject(GetState());
+            Logger.Create().Debug("SaveState {}", filePath);
 
             File.WriteAllText(filePath, json);
         }
@@ -258,12 +260,13 @@ namespace workspacer
         public WorkspacerState LoadState()
         {
             var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "workspacer.State.json");
-
+            Logger.Create().Debug("LoadState {}", filePath);
             if (File.Exists(filePath))
             {
                 var json = File.ReadAllText(filePath);
                 var state = JsonConvert.DeserializeObject<WorkspacerState>(json);
-                File.Delete(filePath);
+                // Better than nothing if we have a crash or so.
+                // File.Delete(filePath);
                 return state;
             }
             else

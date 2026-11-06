@@ -1242,8 +1242,7 @@ namespace workspacer
 
         public WorkspaceState GetState()
         {
-            var workspacesToWindows =
-                new List<List<int>>();
+            var workspacesToWindows = new List<List<SavedWindowState>>();
 
             var monitorsToWorkspaces =
                 new List<int>();
@@ -1253,21 +1252,27 @@ namespace workspacer
                     .GetAllWorkspaces()
                     .ToList();
 
+            var workspaceLayouts = allWorkspaces
+                .Select(workspace => workspace.LayoutName)
+                .ToList();
+
+            var focusedWorkspace = -1;
             var focusedWindow = 0;
 
-            foreach (var workspace in allWorkspaces)
+            for (var workspaceIndex = 0; workspaceIndex < allWorkspaces.Count; workspaceIndex++)
             {
-                var windows = new List<int>();
+                var workspace = allWorkspaces[workspaceIndex];
+                var windows = new List<SavedWindowState>();
 
-                foreach (var window in workspace.Windows)
+                foreach (var window in workspace.Windows.Where(window => window.CanLayout))
                 {
-                    windows.Add((int)window.Handle);
-
                     if (window.IsFocused)
                     {
-                        focusedWindow =
-                            (int)window.Handle;
+                        focusedWorkspace = workspaceIndex;
+                        focusedWindow = windows.Count;
                     }
+
+                    windows.Add(GetWindowState(window));
                 }
 
                 workspacesToWindows.Add(windows);
@@ -1312,15 +1317,78 @@ namespace workspacer
                 WorkspacesToWindows =
                     workspacesToWindows,
 
+                WorkspaceLayouts =
+                    workspaceLayouts,
+
                 MonitorsToWorkspaces =
                     monitorsToWorkspaces,
 
                 FocusedMonitor =
                     focusedMonitor,
 
+                FocusedWorkspace =
+                    focusedWorkspace,
+
                 FocusedWindow =
                     focusedWindow
             };
+        }
+
+        private static SavedWindowState GetWindowState(IWindow window)
+        {
+            return new SavedWindowState
+            {
+                Handle = window.Handle.ToInt64(),
+                ProcessName = window.ProcessName,
+                Class = window.Class,
+                Title = window.Title
+            };
+        }
+
+        private static IWindow FindWindow(SavedWindowState saved, IList<IWindow> availableWindows)
+        {
+            var window = availableWindows.FirstOrDefault(candidate =>
+                candidate.Handle.ToInt64() == saved.Handle &&
+                SameProcess(candidate, saved));
+
+            if (window != null)
+            {
+                Logger.Debug("Restored window by handle and process: {0}", window);
+                return window;
+            }
+
+            window = availableWindows.FirstOrDefault(candidate =>
+                SameProcess(candidate, saved) &&
+                string.Equals(candidate.Class, saved.Class, System.StringComparison.Ordinal) &&
+                string.Equals(candidate.Title, saved.Title, System.StringComparison.Ordinal));
+
+            if (window != null)
+            {
+                Logger.Debug("Restored window by process, class and title: {0}", window);
+                return window;
+            }
+
+            window = availableWindows.FirstOrDefault(candidate =>
+                SameProcess(candidate, saved) &&
+                string.Equals(candidate.Class, saved.Class, System.StringComparison.Ordinal));
+
+            if (window != null)
+            {
+                Logger.Debug("Restored window by process and class: {0}", window);
+                return window;
+            }
+
+            window = availableWindows.FirstOrDefault(candidate => SameProcess(candidate, saved));
+
+            if (window != null)
+                Logger.Warn("Restored window by process only: saved title={0}, matched={1}", saved.Title, window);
+
+            return window;
+        }
+
+        private static bool SameProcess(IWindow window, SavedWindowState saved)
+        {
+            return string.Equals(window.ProcessName, saved.ProcessName, System.StringComparison.OrdinalIgnoreCase);
         }
 
         public void InitializeWithState(
@@ -1334,6 +1402,30 @@ namespace workspacer
                 _context.WorkspaceContainer
                     .GetAllWorkspaces()
                     .ToList();
+
+            var availableWindows = allWindows.ToList();
+            IWindow focusedWindow = null;
+
+            Logger.Debug("InitializeWithState: state {0} workspaces {1}", state, allWorkspaces);
+
+            /*
+             * WorkspaceLayouts is absent in state files written by older
+             * versions, so keep each workspace's configured default in that case.
+             */
+            if (state.WorkspaceLayouts != null)
+            {
+                var count = System.Math.Min(state.WorkspaceLayouts.Count, allWorkspaces.Count);
+
+                Logger.Debug("InitializeWithState: state {0} workspaces {1}", state.WorkspaceLayouts.Count, allWorkspaces.Count);
+                for (var index = 0; index < count; index++)
+                {
+                    var layoutName = state.WorkspaceLayouts[index];
+                    Logger.Debug("InitializeWithState: state {0}", layoutName);
+
+                    if (!allWorkspaces[index].TrySetLayout(layoutName))
+                        Logger.Warn("Could not restore layout {0} for workspace {1}", layoutName, allWorkspaces[index].Name);
+                }
+            }
 
             var focusedMonitor =
                 _context.MonitorContainer.GetMonitorAtIndex(
@@ -1390,66 +1482,49 @@ namespace workspacer
                 }
             }
 
-            for (var workspaceIndex = 0;
-                 workspaceIndex < workspacesToWindows.Count;
-                 workspaceIndex++)
+            for (var workspaceIndex = 0; workspaceIndex < workspacesToWindows.Count; workspaceIndex++)
             {
-                var workspaceWindows =
-                    workspacesToWindows[workspaceIndex];
+                var workspaceWindows = workspacesToWindows[workspaceIndex];
 
-                for (var windowIndex = 0;
-                     windowIndex < workspaceWindows.Count;
-                     windowIndex++)
+                for (var windowIndex = 0; windowIndex < workspaceWindows.Count; windowIndex++)
                 {
-                    var handle =
-                        workspaceWindows[windowIndex];
-
-                    var window = allWindows.FirstOrDefault(
-                        candidate =>
-                            (int)candidate.Handle == handle);
+                    var savedWindow = workspaceWindows[windowIndex];
+                    var window = FindWindow(savedWindow, availableWindows);
 
                     if (window == null)
                     {
+                        Logger.Warn("Could not restore window: process={0}, class={1}, title={2}", savedWindow.ProcessName, savedWindow.Class, savedWindow.Title);
                         continue;
                     }
 
-                    var routedWorkspace =
-                        _context.WindowRouter.RouteWindow(
-                            window);
+                    availableWindows.Remove(window);
+
+                    var routedWorkspace = _context.WindowRouter.RouteWindow(window);
 
                     if (routedWorkspace == null)
-                    {
                         continue;
-                    }
 
-                    if (workspaceIndex <
-                        allWorkspaces.Count)
-                    {
-                        /*
-                         * Ignore the routed workspace because the saved
-                         * state indicates that the user deliberately put
-                         * the window in this workspace.
-                         */
-                        var workspace =
-                            allWorkspaces[workspaceIndex];
+                    var workspace = workspaceIndex < allWorkspaces.Count ? allWorkspaces[workspaceIndex] : routedWorkspace;
 
-                        AddWindowToWorkspace(
-                            window,
-                            workspace);
-                    }
-                    else
-                    {
-                        AddWindowToWorkspace(
-                            window,
-                            routedWorkspace);
-                    }
+                    AddWindowToWorkspace(window, workspace);
 
-                    if (state.FocusedWindow == handle)
-                    {
-                        window.Focus();
-                    }
+                    if (workspaceIndex == state.FocusedWorkspace && windowIndex == state.FocusedWindow)
+                        focusedWindow = window;
                 }
             }
+
+            foreach (var window in availableWindows)
+            {
+                var locationWorkspace = GetWorkspaceForWindowLocation(window);
+                var destinationWorkspace = _context.WindowRouter.RouteWindow(window, locationWorkspace);
+
+                if (destinationWorkspace == null)
+                    continue;
+
+                AddWindowToWorkspace(window, destinationWorkspace);
+            }
+
+            focusedWindow?.Focus();
         }
 
         public void Initialize(

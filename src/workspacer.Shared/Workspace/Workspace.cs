@@ -55,6 +55,15 @@ namespace workspacer
         public string LayoutName =>
             _layoutEngines[_layoutIndex].Name;
 
+        public bool TrySetLayout(string name)
+        {
+            var index = System.Array.FindIndex(_layoutEngines, layout => layout.Name == name);
+            if (index < 0) return false;
+
+            _layoutIndex = index;
+            return true;
+        }
+
         public bool IsIndicating { get; set; }
 
         private readonly IConfigContext _context;
