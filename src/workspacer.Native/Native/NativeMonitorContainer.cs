@@ -13,7 +13,13 @@ namespace workspacer
 
         public NativeMonitorContainer()
         {
-            var screens = Screen.AllScreens;
+            var screens = Screen.AllScreens
+                .Where(screen => !screen.Primary)
+                .OrderBy(screen => screen.Bounds.X)
+                .ThenBy(screen => screen.Bounds.Y)
+                .Prepend(Screen.PrimaryScreen)
+                .ToArray();
+
             _monitors = new Monitor[screens.Length];
             _monitorMap = new Dictionary<IMonitor, int>();
 
@@ -21,17 +27,13 @@ namespace workspacer
             _monitors[0] = primaryMonitor;
             _monitorMap[primaryMonitor] = 0;
 
-            var index = 1;
-            foreach (var screen in screens)
+            for (var index = 0; index < screens.Length; index++)
             {
-                if (!screen.Primary)
-                {
-                    var monitor = new Monitor(index, screen);
-                    _monitors[index] = monitor;
-                    _monitorMap[monitor] = index;
-                    index++;
-                }
+                var monitor = new Monitor(index, screens[index]);
+                _monitors[index] = monitor;
+                _monitorMap[monitor] = index;
             }
+
             FocusedMonitor = _monitors[0];
         }
 
